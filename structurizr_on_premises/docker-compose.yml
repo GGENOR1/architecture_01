@@ -1,3 +1,4 @@
+
 version: '3.3'
 services:
   structurizr-onpremises:
@@ -8,4 +9,4 @@ services:
     volumes:
         - ./onpremises:/usr/local/structurizr:z
 
-
+#test
