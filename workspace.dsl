@@ -1,6 +1,6 @@
 workspace {
-    name "Умный дом"
-    description "Простая система управления умного дома с базовыми функциями контроля состояния атмосферы в помещении"
+    name "Сайт конференций"
+    description "Система управления конференциями"
 
     # включаем режим с иерархической системой идентификаторов
     !identifiers hierarchical
@@ -17,35 +17,37 @@ workspace {
         
 
         # Описание компонент модели
-        user = person "Пользователь умного дома"
-        sensor     = softwareSystem "Датчик температуры"
-        smart_home = softwareSystem "Умный дом" {
-            description "Сервер управления умным домом"
+        user = person "Пользователь"
+        conference_system = softwareSystem "Система конференций" {
+            description "Сервер управления конференциями и докладами"
 
             user_service = container "User service" {
                 description "Сервис управления пользователями"
             }
 
-            temperature_service = container "Temperature service" {
-                description "Сервис мониторинга и управления температурой в доме"
+            conference_service = container "Conference service" {
+                description "Сервис управления конференциями"
+            }
+            reports_service = container "Reports service" {
+                description "Сервис управления докладами"
             }
 
             group "Слой данных" {
                 user_database = container "User Database" {
-                    description "База данных с пользователями"
-                    technology "PostgreSQL 15"
+                    description "База данных с данными пользователей"
+                    technology "PostgreSQL 16"
                     tags "database"
                 }
 
                 user_cache = container "User Cache" {
-                    description "Кеш пользовательских данных для ускорения аутентификации"
-                    technology "PostgreSQL 15"
+                    description "Кеш пользовательских данных"
+                    technology "Redis 7.2"
                     tags "database"
                 }
 
-                smarthome_database = container "Smarthome Database" {
-                    description "База данных для хранения информации с сенсоров"
-                    technology "MongoDB 5"
+                Conference_database = container "Conference Database" {
+                    description "База данных с данными о докладах и конференциях"
+                    technology "MongoDB 7.0.6"
                     tags "database"
                 }
             }
@@ -53,43 +55,45 @@ workspace {
             user_service -> user_cache "Получение/обновление данных о пользователях" "TCP 6379"
             user_service -> user_database "Получение/обновление данных о пользователях" "TCP 5432"
 
-            temperature_service -> smarthome_database "Получение/обновление данных о температуре" "TCP 27018"
-            temperature_service -> user_service "Аутентификация пользователя" "REST HTTP 443"
-
+            conference_service -> Conference_database "Получение/обновление данных о конференциях" "TCP 27018"
+            conference_service -> user_service "Аутентификация пользователя" "REST HTTP 443"
+            reports_service -> user_service "Аутентификация пользователя" "REST HTTP 443"
+          
+            reports_service -> Conference_database "Получение/обновление данных о докладах" "TCP 27018"
+            user -> conference_system "Добавление докладов и участие в конференциях" "REST HTTP:8080" 
+            user -> conference_service "Добавление конференций" "REST HTTP:8080"
+            user -> reports_service "Добавление докладов " "REST HTTP:8080"
             user -> user_service "Регистрация нового пользователя" "REST HTTP:8080"
-            sensor -> temperature_service "Получение данных о температуре в доме" "REST HTTP:8080"
+        
         }
 
-        user -> smart_home "Управление устройствами умного дома"
-        sensor -> smart_home "Обновление актуальных данных о температуре в доме" "REST HTTP:8080"
+        
 
         deploymentEnvironment "Production" {
             deploymentNode "User Server" {
-                containerInstance smart_home.user_service
+                containerInstance conference_system.user_service
             }
 
-            deploymentNode "Temperature Server" {
-                containerInstance smart_home.temperature_service
-                properties {
-                    "cpu" "4"
-                    "ram" "256Gb"
-                    "hdd" "4Tb"
-                }
+            deploymentNode "Conference Server" {
+                containerInstance conference_system.conference_service
+            }
+             deploymentNode "Reports Server" {
+                containerInstance conference_system.reports_service
             }
 
             deploymentNode "databases" {
      
                 deploymentNode "Database Server 1" {
-                    containerInstance smart_home.user_database
+                    containerInstance conference_system.user_database
                 }
 
                 deploymentNode "Database Server 2" {
-                    containerInstance smart_home.smarthome_database
+                    containerInstance conference_system.Conference_database
                     instances 3
                 }
 
                 deploymentNode "Cache Server" {
-                    containerInstance smart_home.user_cache
+                    containerInstance conference_system.user_cache
                 }
             }
             
@@ -109,29 +113,44 @@ workspace {
             workspace.views.views.findAll { it instanceof com.structurizr.view.ModelView }.each { it.enableAutomaticLayout() }
         }
 
-        dynamic smart_home "UC01" "Добавление нового пользователя" {
+        dynamic conference_system "UC01" "Добавление нового пользователя" {
             autoLayout
-            user -> smart_home.user_service "Создать нового пользователя (POST /user)"
-            smart_home.user_service -> smart_home.user_database "Сохранить данные о пользователе" 
+            user -> conference_system.user_service "Создание нового пользователя (POST /user)"
+            conference_system.user_service -> conference_system.user_database "Сохранение данных о пользователе" 
         }
 
-        dynamic smart_home "UC02" "Удаление пользователя" {
+        dynamic conference_system "UC02" "Удаление пользователя" {
             autoLayout
-            user -> smart_home.user_service "Удалить нового пользователя (DELETE /user)"
-            smart_home.user_service -> smart_home.user_database "Удалить данные о пользователе" 
+            user -> conference_system.user_service "Удаление пользователя (DELETE /user)" 
+            conference_system.user_service -> conference_system.user_database "Удаление данных о пользователе" 
         }
 
-        dynamic smart_home "UC03" "Сохранить данные о температуре" {
+        dynamic conference_system "UC03" "Создание нового доклада" {
             autoLayout
-            sensor -> smart_home.temperature_service "Сохранить данные о температуре (POST /user)"
-            smart_home.temperature_service -> smart_home.smarthome_database "Сохранить данные о температуре" 
+            user -> conference_system.reports_service "Создание нового доклада (POST /reports)"
+            conference_system.reports_service -> conference_system.user_service "Проверить аутентификацию пользователя (GET /user)"
+            conference_system.reports_service -> conference_system.Conference_database "Сохранение доклада" 
         }
 
-        dynamic smart_home "UC04" "Получить данные о температуре" {
+        dynamic conference_system "UC04" "Получение списка всех докладов" {
             autoLayout
-            sensor -> smart_home.temperature_service "Получить данные о температуре (GET /user)"
-            smart_home.temperature_service -> smart_home.user_service "Проверить аутентификацию пользователя (GET /user)"
-            smart_home.temperature_service -> smart_home.smarthome_database "Получить данные о температуре" 
+            user -> conference_system.reports_service "Получение списка всех докладов (GET /reports)"
+            conference_system.reports_service -> conference_system.user_service "Проверить аутентификацию пользователя (GET /user)"
+            conference_system.reports_service -> conference_system.Conference_database "Получение списка всех докладов" 
+        }
+
+        dynamic conference_system "UC05" "Добавление доклада в конференцию" {
+            autoLayout
+            user -> conference_system.conference_service "Добавление доклада в конференцию (POST /сonference)"
+            conference_system.conference_service -> conference_system.user_service "Проверить аутентификацию пользователя (GET /user)"
+            conference_system.conference_service -> conference_system.Conference_database "Добавление доклада в конференцию" 
+        }
+
+            dynamic conference_system "UC06" "Получение списка докладов в конференции" {
+            autoLayout
+            user -> conference_system.conference_service "Получение списка докладов в конференции (GET /сonference)"
+            conference_system.conference_service -> conference_system.user_service "Проверить аутентификацию пользователя (GET /user)"
+            conference_system.conference_service -> conference_system.Conference_database "Добавление доклада в конференцию" 
         }
 
 
