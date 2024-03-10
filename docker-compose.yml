@@ -9,14 +9,3 @@ services:
 
 #test
 
-
-version: "3"
-services:
-  structurizr:
-    image: structurizr/lite
-    ports:
-      - 8080:8080
-    volumes:
-      - .:/usr/local/structurizr:z
-
-#test
